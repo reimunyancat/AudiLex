@@ -48,7 +48,7 @@ def extract_video_ids(url):
     
     return [url]
 
-def process_url(url, download_path):
+def process(url, download_path):
     video_urls = extract_video_ids(url)
     
     for video_url in video_urls:
@@ -63,7 +63,7 @@ def main():
     if not os.path.exists(download_path):
         os.makedirs(download_path)
     
-    process_url(url, download_path)
+    process(url, download_path)
 
 if __name__ == '__main__':
     main()
