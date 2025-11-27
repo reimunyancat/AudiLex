@@ -6,6 +6,11 @@ from rest_framework.response import Response
 from .models import Processing
 from .serializers import ProcessingSerializer
 from django.conf import settings
+from audio import process as download_process
+from functions.transcribe import STTmodel
+
+
+model = STTmodel()
 
 
 def run_download_in_background(job_id):
