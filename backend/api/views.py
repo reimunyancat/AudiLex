@@ -3,6 +3,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
 from audio import process as download_process
+from functions.transcribe import STTmodel
+
+
+model = STTmodel()
 
 
 @api_view(['POST'])

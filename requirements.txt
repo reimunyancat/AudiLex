@@ -1,5 +1,6 @@
 yt_dlp
 django
 djangorestframework
-openai
+openai-whisper
 ffmpeg
+transformers
