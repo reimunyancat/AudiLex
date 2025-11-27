@@ -1,69 +1,71 @@
-from rest_framework.decorators import api_view
+import os
+import threading
+import yt_dlp
+from rest_framework import viewsets, status
 from rest_framework.response import Response
-from rest_framework import status
+from .models import Processing
+from .serializers import ProcessingSerializer
 from django.conf import settings
-from audio import process as download_process
 
 
-@api_view(['POST'])
-def download_audio(request):
+def run_download_in_background(job_id):
     """
-    API endpoint to download audio from a YouTube video.
+    Downloads audio in a separate thread and updates the job status.
     """
-    if request.method == 'POST':
-        video_url = request.data.get('video_url')
-        if not video_url:
-            return Response({'error': 'video_url is required'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        job = Processing.objects.get(pk=job_id)
+        job.download_status = Processing.Status.PROCESSING
+        job.save()
 
-        try:
-            download_process(video_url, settings.MEDIA_ROOT)
-            
-            response_data = {
-                'message': 'Audio download completed successfully.',
-                'video_url': video_url,
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        os.makedirs(settings.DATA_ROOT, exist_ok=True)
 
-@api_view(['GET'])
-def download_list(request):
-    """
-    현재 다운받은 파일/다운받아져있는 파일 모두 조회
-    """
-
-@api_view(['GET'])
-def transcribe(request):
-    """
-    이제 여기서 다운받은 mp3가지고 응땅하면됨
-    """
-    if request.method == 'POST':
-        video_url = request.data.get('video_url')
-        if not video_url:
-            return Response({'error': 'video_url is required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # TODO
-        
-        response_data = {
-            'message': 'Transcription process started.',
-            'video_url': video_url,
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': {
+                'default': str(settings.DATA_ROOT / '%(id)s.%(ext)s')
+            },
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+            }],
+            'quiet': True,
         }
-        return Response(response_data, status=status.HTTP_200_OK)
 
-@api_view(['GET'])
-def tutor(request):
-    """
-    받은 id의 transcribe, ipa, translate 모두 합쳐서 반환
-    """
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(job.youtube_link, download=True)
+            filename = os.path.relpath(ydl.prepare_filename(info, outtmpl=str(settings.DATA_ROOT / '%(id)s.%(ext)s')), settings.DATA_ROOT)
+            
+            job.title = info.get('title', 'Unknown Title')
+            job.audio_file_path = filename
+            job.download_status = Processing.Status.SUCCESS
+            job.save()
 
-@api_view(['GET'])
-def status(request):
-    """
-    받은 id의 transcribe, ipa, translate의 상황(진행 안됨, 진행중, 완료) 조회
-    """
+    except Exception as e:
+        print(f"Error downloading {job_id}: {e}")
+        job.download_status = Processing.Status.FAILED
+        job.save()
 
-@api_view(['GET'])
-def statuses(request):
+
+class ProcessingViewSet(viewsets.ModelViewSet):
     """
-    모든 transcribe, ipa, translate 상황 조회
+    API endpoint that allows processing jobs to be viewed or created.
     """
+    queryset = Processing.objects.all().order_by('-created_at')
+    serializer_class = ProcessingSerializer
+
+    def create(self, request, *args, **kwargs):
+        """
+        Starts a new download job.
+        Expects {'youtube_link': '...'} in the request body.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        self.perform_create(serializer)
+        job = serializer.instance
+        
+        thread = threading.Thread(target=run_download_in_background, args=(job.id,))
+        thread.start()
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_202_ACCEPTED, headers=headers)

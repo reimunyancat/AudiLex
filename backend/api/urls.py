@@ -1,12 +1,10 @@
-from django.urls import path
-from .views import download_audio, download_list, transcribe, tutor, status, statuses
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from . import views
+
+router = DefaultRouter()
+router.register(r'processings', views.ProcessingViewSet, basename='processing')
 
 urlpatterns = [
-    path('download/<str:link>',download_audio, name='download_audio'),
-    path('download_list/',download_list, name='download_list'),
-    path('transcribe/', transcribe, name='transcribe'),
-    path('tutor/<int:id>',tutor,name='tutor'),
-    path('status/<int:id>',status,name='status'),
-    path('statuses/',statuses,name='statuses'),
+    path('', include(router.urls)),
 ]
-
