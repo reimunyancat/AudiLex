@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -120,6 +121,9 @@ STATIC_URL = "static/"
 
 DATA_URL = "data/"
 DATA_ROOT = BASE_DIR / "data"
+
+# STT Server Configuration
+STT_SERVER_URL = os.environ.get("STT_SERVER_URL", "https://genty-lavonne-mastless.ngrok-free.dev")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
