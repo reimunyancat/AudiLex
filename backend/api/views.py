@@ -1,59 +1,77 @@
 import threading
-from rest_framework import viewsets, status
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework import status, viewsets
+from django.conf import settings
 from .models import Processing
 from .serializers import ProcessingSerializer
+from functions.transcribe import STTmodel
 from functions.audio import download_audio
 
-class ProcessingViewSet(viewsets.ModelViewSet):
+
+model = STTmodel()
+
+
+@api_view(['POST'])
+def download_audio(request):
     """
-    API endpoint that allows processing jobs to be viewed or created.
+    API endpoint to download audio from a YouTube video.
     """
-    authentication_classes = []
-    queryset = Processing.objects.all().order_by('-created_at')
-    serializer_class = ProcessingSerializer
+    if request.method == 'POST':
+        video_url = request.data.get('video_url')
+        if not video_url:
+            return Response({'error': 'video_url is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    def create(self, request, *args, **kwargs):
-        """
-        Starts a new download job or restarts a failed one.
-        Expects {'youtube_link': '...'} in the request body.
-        """
-        youtube_link = request.data.get('youtube_link')
-        if not youtube_link:
-            return Response({'youtube_link': ['This field is required.']}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            download_process(video_url, settings.MEDIA_ROOT)
+            
+            response_data = {
+                'message': 'Audio download completed successfully.',
+                'video_url': video_url,
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        existing_job = Processing.objects.filter(youtube_link=youtube_link).first()
+@api_view(['GET'])
+def download_list(request):
+    """
+    현재 다운받은 파일/다운받아져있는 파일 모두 조회
+    """
 
-        if existing_job:
-            # If a failed job exists, restart it
-            if existing_job.download_status == Processing.Status.FAILED or \
-               existing_job.transcript_status == Processing.Status.FAILED:
-                
-                existing_job.download_status = Processing.Status.PENDING
-                existing_job.transcript_status = Processing.Status.PENDING
-                existing_job.save()
-                
-                thread = threading.Thread(target=download_audio, args=(existing_job.id,))
-                thread.start()
-                
-                serializer = self.get_serializer(existing_job)
-                headers = self.get_success_headers(serializer.data)
-                return Response(serializer.data, status=status.HTTP_200_OK, headers=headers)
-            else:
-                # Job is already PENDING or SUCCESS, return existing data
-                serializer = self.get_serializer(existing_job)
-                headers = self.get_success_headers(serializer.data)
-                return Response(serializer.data, status=status.HTTP_200_OK, headers=headers)
+@api_view(['GET'])
+def transcribe(request):
+    """
+    이제 여기서 다운받은 mp3가지고 응땅하면됨
+    """
+    if request.method == 'POST':
+        video_url = request.data.get('video_url')
+        if not video_url:
+            return Response({'error': 'video_url is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # TODO
         
-        # No existing job, create a new one
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        self.perform_create(serializer)
-        job = serializer.instance
-        
-        thread = threading.Thread(target=download_audio, args=(job.id,))
-        thread.start()
-        
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_202_ACCEPTED, headers=headers)
+        response_data = {
+            'message': 'Transcription process started.',
+            'video_url': video_url,
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def tutor(request):
+    """
+    받은 id의 transcribe, ipa, translate 모두 합쳐서 반환
+    """
+
+@api_view(['GET'])
+def status(request):
+    """
+    받은 id의 transcribe, ipa, translate의 상황(진행 안됨, 진행중, 완료) 조회
+    """
+
+@api_view(['GET'])
+def statuses(request):
+    """
+    모든 transcribe, ipa, translate 상황 조회
+    """
