@@ -1,5 +1,6 @@
 import whisper
 import json
+import os
 
 DATA_PATH = 'backend/data'
 
