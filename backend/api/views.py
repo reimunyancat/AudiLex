@@ -1,9 +1,12 @@
+import threading
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, viewsets
 from django.conf import settings
-from audio import process as download_process
+from .models import Processing
+from .serializers import ProcessingSerializer
 from functions.transcribe import STTmodel
+from functions.audio import download_audio
 
 
 model = STTmodel()
@@ -53,6 +56,7 @@ def transcribe(request):
             'video_url': video_url,
         }
         return Response(response_data, status=status.HTTP_200_OK)
+
 
 @api_view(['GET'])
 def tutor(request):
