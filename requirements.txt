@@ -3,4 +3,5 @@ django
 djangorestframework
 openai-whisper
 ffmpeg
-transformers
+openai
+ollama

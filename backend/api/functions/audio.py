@@ -12,8 +12,6 @@ from django.conf import settings
 if not settings.configured:
     django.setup()
 
-from ..models import Audio
-
 def _data_root() -> Path:
     base_dir = Path(getattr(settings, "DATA_ROOT", Path(settings.BASE_DIR) / "data"))
     base_dir.mkdir(parents=True, exist_ok=True)
@@ -38,48 +36,31 @@ def _download_youtube_audio(youtube_link: str, output_dir: Path):
         final_mp3_path = output_dir / f"{video_id}.mp3"
         return video_id, title, final_mp3_path
 
-def _save_audio_db(job: Audio, title: str, final_mp3_path: Path):
-    relative_path = os.path.relpath(final_mp3_path, settings.BASE_DIR)
-    job.youtube_title = title
-    job.audio_name = title
-    job.audio_dir = relative_path
-    job.audio_status = Audio.Status.FINISHED
-    job.save(update_fields=[
-        'youtube_title',
-        'audio_name',
-        'audio_dir',
-        'audio_status',
-    ])
+def download_audio(youtube_link: str):
+    """Download audio for a single YouTube link and return metadata."""
+    data_root = _data_root()
+    audio_dir = data_root / 'audio'
+    audio_dir.mkdir(parents=True, exist_ok=True)
 
-def download_audio(job_id):
-    job = None
-    try:
-        job = Audio.objects.get(pk=job_id)
-        job.audio_status = Audio.Status.PROCESSING
-        job.save(update_fields=['audio_status'])
-
-        data_root = _data_root()
-        audio_dir = data_root / 'audio'
-        audio_dir.mkdir(parents=True, exist_ok=True)
-
-        _, title, final_mp3_path = _download_youtube_audio(job.youtube_link, audio_dir)
-        _save_audio_db(job, title, final_mp3_path)
-
-    except Audio.DoesNotExist:
-        print(f"Audio job {job_id} does not exist")
-    except Exception as e:
-        print(f"Error processing {job_id}: {e}")
-        if job:
-            job.audio_status = Audio.Status.FAILED
-            job.save(update_fields=['audio_status'])
+    video_id, title, final_mp3_path = _download_youtube_audio(youtube_link, audio_dir)
+    return {
+        'video_id': video_id,
+        'title': title,
+        'absolute_path': str(final_mp3_path),
+        'relative_path': os.path.relpath(final_mp3_path, settings.BASE_DIR),
+    }
 
 
 def _download_raw_audio(youtube_link: str, output_dir: Path | None = None) -> Path:
-    output_dir = output_dir or (_data_root() / 'audio')
-    output_dir.mkdir(parents=True, exist_ok=True)
-    _, title, final_path = _download_youtube_audio(youtube_link, output_dir)
-    print(f"Downloaded '{title}' to {final_path}")
-    return final_path
+    if output_dir:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        _, title, final_path = _download_youtube_audio(youtube_link, output_dir)
+        print(f"Downloaded '{title}' to {final_path}")
+        return final_path
+
+    metadata = download_audio(youtube_link)
+    print(f"Downloaded '{metadata['title']}' to {metadata['absolute_path']}")
+    return Path(metadata['absolute_path'])
 
 
 if __name__ == "__main__":
