@@ -1,23 +1,28 @@
 from django.db import models
+import uuid
 
-class Processing(models.Model):
+def default_audio_data():
+    return {"data": []}
+
+
+class Audio(models.Model):
     class Status(models.TextChoices):
-        PENDING = 'PENDING', '대기 중'
-        PROCESSING = 'PROCESSING', '처리 중'
-        SUCCESS = 'SUCCESS', '성공'
-        FAILED = 'FAILED', '실패'
+        NOT_PROCESSED = 'Not Processed', 'Not Processed'
+        PROCESSING = 'Processing', 'Processing'
+        FINISHED = 'Finished', 'Finished'
+        FAILED = 'Failed', 'Failed'
+        
 
-    youtube_link = models.URLField(max_length=500, unique=True)
-    title = models.CharField(max_length=255, blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    download_status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    audio_file_path = models.CharField(max_length=512, blank=True, null=True)
-    transcript_status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    transcript = models.JSONField(blank=True, null=True)
-    ipa_status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    ipa = models.TextField(blank=True, null=True)
-    translate_status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    translation = models.TextField(blank=True, null=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    youtube_link = models.URLField()
+    youtube_title = models.CharField(max_length=255)
+    audio_name = models.CharField(max_length=255)
+    audio_status = models.CharField(max_length=20, choices=Status.choices, default=Status.NOT_PROCESSED)
+    audio_dir = models.CharField(max_length=512)
+    audio_data = models.JSONField(default=default_audio_data, blank=True)
+    subtitle_status = models.CharField(max_length=20, choices=Status.choices, default=Status.NOT_PROCESSED)
+    translation_status = models.CharField(max_length=20, choices=Status.choices, default=Status.NOT_PROCESSED)
+    pronounce_status = models.CharField(max_length=20, choices=Status.choices, default=Status.NOT_PROCESSED)
 
     def __str__(self):
-        return f"{self.title or self.id}"
+        return f"{self.audio_name} ({self.id})"

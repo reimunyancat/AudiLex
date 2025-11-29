@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 import yt_dlp
 import requests
-from models import Processing
+from models import Audio
 from django.conf import settings
 
 def _download_youtube_audio(youtube_link: str, output_dir: Path):
@@ -23,17 +23,17 @@ def _download_youtube_audio(youtube_link: str, output_dir: Path):
         final_mp3_path = output_dir / f"{video_id}.mp3"
         return video_id, title, final_mp3_path
 
-def _save_audio_db(job: Processing, title: str, final_mp3_path: Path):
+def _save_audio_db(job: Audio, title: str, final_mp3_path: Path):
     filename_for_db = os.path.relpath(final_mp3_path, settings.DATA_ROOT)
     job.title = title
     job.audio_file_path = filename_for_db
-    job.download_status = Processing.Status.SUCCESS
+    job.download_status = Audio.Status.SUCCESS
     job.save()
 
 def download_audio(job_id):
     try:
-        job = Processing.objects.get(pk=job_id)
-        job.download_status = Processing.Status.PROCESSING
+        job = Audio.objects.get(pk=job_id)
+        job.download_status = Audio.Status.PROCESSING
         job.save()
 
         audio_dir = settings.DATA_ROOT / 'audio'
@@ -59,21 +59,21 @@ def download_audio(job_id):
             transcription_result = stt_response.json()
 
             job.transcript = transcription_result['text']
-            job.transcript_status = Processing.Status.SUCCESS
+            job.transcript_status = Audio.Status.SUCCESS
             job.save()
             print(f"Transcription complete for {job.id}.")
 
         except requests.exceptions.RequestException as req_e:
             print(f"Error communicating with STT server for {job.id}: {req_e}")
-            job.transcript_status = Processing.Status.FAILED
+            job.transcript_status = Audio.Status.FAILED
             job.save()
         except Exception as e:
             print(f"Error processing transcription result for {job.id}: {e}")
-            job.transcript_status = Processing.Status.FAILED
+            job.transcript_status = Audio.Status.FAILED
             job.save()
 
 
     except Exception as e:
         print(f"Error processing {job_id}: {e}")
-        job.download_status = Processing.Status.FAILED
+        job.download_status = Audio.Status.FAILED
         job.save()

@@ -1,14 +1,19 @@
 from rest_framework import serializers
-from .models import Processing
+from .models import Audio
 
 
 class ProcessingSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Processing
+        model = Audio
         fields = [
-            'id', 'youtube_link', 'title', 'created_at',
-            'download_status', 'audio_file_path',
-            'transcript_status', 'transcript',
-            'ipa_status', 'ipa',
-            'translate_status', 'translation'
+            'id',
+            'youtube_link',
+            'youtube_title',
+            'audio_name',
+            'audio_status',
+            'audio_dir',
+            'audio_data',
+            'subtitle_status',
+            'translation_status',
+            'pronounce_status',
         ]
