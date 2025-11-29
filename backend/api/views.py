@@ -10,6 +10,7 @@ from .models import Audio
 from .functions.audio import download_audio as process_audio_download
 from .functions.subtitle import STTModel
 from .functions.preprocess import PreprocessModel
+from .functions.status import get_status_by_id, get_all_statuses
 
 
 stt_model = STTModel()
@@ -55,16 +56,25 @@ def download_audio(request):
         return Response(response_data, status=drf_status.HTTP_201_CREATED)
 
 @api_view(['GET'])
-def status(request):
+def status(request, id):
     """
     받은 id의 transcribe, ipa, translate의 상황(진행 안됨, 진행중, 완료) 조회
+    GET /api/status/{id}
     """
+    data, error = get_status_by_id(id)
+    if error:
+        return Response({'error': error}, status=status.HTTP_404_NOT_FOUND)
+    return Response(data, status=status.HTTP_200_OK)
+
 
 @api_view(['GET'])
 def statuses(request):
     """
     모든 transcribe, ipa, translate 상황 조회
+    GET /api/statuses/
     """
+    data = get_all_statuses()
+    return Response(data, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 def subtitle(request, id):
