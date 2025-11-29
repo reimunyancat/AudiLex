@@ -1,7 +1,7 @@
 import whisper
 
 
-class STTmodel:
+class STTModel:
     def __init__(self, model='medium'):
         self.model_size = model
         self.model = None
@@ -29,5 +29,5 @@ class STTmodel:
 
 
 if __name__ == "__main__":
-    model = STTmodel(model='base')
+    model = STTModel(model='base')
     print(model.transcribe('/Users/sungho/dev/AudiLex/backend/data/audio/1.wav'))

@@ -2,8 +2,9 @@ import os
 from pathlib import Path
 import yt_dlp
 import requests
-from models import Audio
 from django.conf import settings
+
+from ..models import Audio
 
 def _download_youtube_audio(youtube_link: str, output_dir: Path):
     ydl_opts = {

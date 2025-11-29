@@ -1,15 +1,19 @@
 import os
+import base64
+import mimetypes
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from .models import Audio
-from .functions.audio import download_audio
-from .functions.subtitle import STTmodel
+from .functions.audio import download_audio as process_audio_download
+from .functions.subtitle import STTModel
+from .functions.pronounce import PronounceModel
 
 
-model = STTmodel()
+stt_model = STTModel()
+pronounce_model = PronounceModel()
 
 
 @api_view(['POST'])
@@ -23,7 +27,7 @@ def download_audio(request):
             return Response({'error': 'video_url is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            download_audio(video_url, settings.MEDIA_ROOT)
+            process_audio_download(video_url, settings.MEDIA_ROOT)
             
             response_data = {
                 'message': 'Audio download completed successfully.',
@@ -63,7 +67,7 @@ def subtitle(request, id):
     audio.save(update_fields=['subtitle_status'])
 
     try:
-        timelines = model.transcribe(audio_path)
+        timelines = stt_model.transcribe(audio_path)
         formatted_timelines = [
             {
                 'index': item.get('index'),
@@ -97,4 +101,36 @@ def pronounce(request, id):
 
 @api_view(['GET'])
 def audio_data(request, id):
-    ...
+    audio = get_object_or_404(Audio, pk=id)
+
+    audio_path = audio.audio_dir
+    if not audio_path:
+        return Response({'error': 'audio_dir is not set for this record.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not os.path.isabs(audio_path):
+        audio_path = os.path.join(settings.BASE_DIR, audio_path.lstrip('/'))
+
+    if not os.path.exists(audio_path):
+        return Response({'error': f'audio file not found at {audio_path}'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        with open(audio_path, 'rb') as audio_file:
+            encoded_audio = base64.b64encode(audio_file.read()).decode('utf-8')
+    except OSError as exc:
+        return Response({'error': f'failed to read audio file: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    content_type, _ = mimetypes.guess_type(audio_path)
+    if not content_type:
+        content_type = 'application/octet-stream'
+
+    return Response(
+        {
+            'audio_file': {
+                'name': os.path.basename(audio_path),
+                'content_type': content_type,
+                'data': encoded_audio,
+            },
+            'audio_data': audio.audio_data or {},
+        },
+        status=status.HTTP_200_OK,
+    )
