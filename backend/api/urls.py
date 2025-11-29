@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import download_audio, download_list, transcribe, tutor, status, statuses
+from .views import download_audio, statuses, status, subtitle, translation, pronounce, audio_data
 
 urlpatterns = [
     # path('download/<str:link>',download_audio, name='download_audio'),
@@ -12,7 +12,8 @@ urlpatterns = [
     path('statuses/', statuses, name='statuses'),
     path('status/<str:id>',status,name='status'),
     path('make_subtitle/<str:id>', subtitle, name='subtitle'),
+    path('make_translation/<str:id>', translation, name='translation'),
     path('make_pronounce/<str:id>', pronounce, name='pronounce'),
-    path('audio_data/<str:id>', audio, name='audio')
+    path('audio_data/<str:id>', audio_data, name='audio')
 ]
 
