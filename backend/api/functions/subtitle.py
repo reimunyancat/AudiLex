@@ -1,11 +1,9 @@
 import whisper
-import json
-import os
 
 
 class STTmodel:
     def __init__(self, model='medium'):
-        self.model_size=model
+        self.model_size = model
         self.model = None
     
     def load_model(self):
