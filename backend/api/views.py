@@ -63,8 +63,8 @@ def status(request, id):
     """
     data, error = get_status_by_id(id)
     if error:
-        return Response({'error': error}, status=status.HTTP_404_NOT_FOUND)
-    return Response(data, status=status.HTTP_200_OK)
+        return Response({'error': error}, status=drf_status.HTTP_404_NOT_FOUND)
+    return Response(data, status=drf_status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -74,7 +74,7 @@ def statuses(request):
     GET /api/statuses/
     """
     data = get_all_statuses()
-    return Response(data, status=status.HTTP_200_OK)
+    return Response(data, status=drf_status.HTTP_200_OK)
 
 @api_view(['GET'])
 def subtitle(request, id):

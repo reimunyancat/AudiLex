@@ -1,34 +1,29 @@
-from api.models import Processing
+from api.models import Audio
 
-def format_status_data(processing):
-    """
-    Processing 객체를 상태 응답 데이터로 변환
-    """
+
+def format_status_data(audio):
+    """Audio 객체를 상태 응답 데이터로 변환"""
     return {
-        'id': processing.id,
-        'title': processing.title,
-        'youtube_link': processing.youtube_link,
-        'audio_status': processing.download_status,
-        'subtitle_status': processing.transcript_status,
-        'translation_status': processing.translate_status,
-        'pronounce_status': processing.ipa_status,
-        'created_at': processing.created_at,
+        'id': str(audio.id),
+        'youtube_link': audio.youtube_link,
+        'youtube_title': getattr(audio, 'youtube_title', ''),
+        'audio_status': audio.audio_status,
+        'subtitle_status': audio.subtitle_status,
+        'translation_status': audio.translation_status,
+        'pronounce_status': audio.pronounce_status,
+        'audio_dir': audio.audio_dir,
     }
 
-def get_status_by_id(id):
-    """
-    특정 id의 Processing 상태 조회
-    Returns: (data, error)
-    """
+
+def get_status_by_id(audio_id):
+    """특정 id의 Audio 상태 조회"""
     try:
-        processing = Processing.objects.get(id=id)
-        return format_status_data(processing), None
-    except Processing.DoesNotExist:
-        return None, 'Processing not found'
+        audio = Audio.objects.get(pk=audio_id)
+        return format_status_data(audio), None
+    except Audio.DoesNotExist:
+        return None, 'Audio not found'
+
 
 def get_all_statuses():
-    """
-    모든 Processing 상태 조회
-    """
-    processings = Processing.objects.all().order_by('-created_at')
-    return [format_status_data(p) for p in processings]
+    """모든 Audio 상태 조회"""
+    return [format_status_data(audio) for audio in Audio.objects.all().order_by('-id')]
