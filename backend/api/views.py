@@ -120,17 +120,75 @@ def subtitle(request, id):
 
 @api_view(['GET'])
 def translation(request, id):
-    #id에서 audio_data를 찾음
-    # audio_data에서 1 ~ 까지의 subtitle을 읽어 translation을 내보냄
-    # 받은 translation을 추가해서 저장함
-    ...
+    audio = get_object_or_404(Audio, pk=id)
+
+    audio_data = audio.audio_data or {}
+    subtitles = audio_data.get('data') or []
+    if not subtitles:
+        return Response({'error': 'subtitles are not ready yet'}, status=drf_status.HTTP_400_BAD_REQUEST)
+
+    audio.translation_status = Audio.Status.PROCESSING
+    audio.save(update_fields=['translation_status'])
+
+    updated = False
+    try:
+        preprocess_model.load_model()
+        for entry in subtitles:
+            if entry.get('translate'):
+                continue
+            subtitle_text = entry.get('subtitle') or entry.get('text')
+            if not subtitle_text:
+                continue
+            translation_text = preprocess_model.translate(subtitle_text)
+            entry['translate'] = translation_text.strip()
+            updated = True
+    except Exception as exc:
+        audio.translation_status = Audio.Status.FAILED
+        audio.save(update_fields=['translation_status'])
+        return Response({'error': str(exc)}, status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    if updated:
+        audio.audio_data = audio_data
+    audio.translation_status = Audio.Status.FINISHED
+    audio.save(update_fields=['audio_data', 'translation_status'] if updated else ['translation_status'])
+
+    return Response({'data': subtitles}, status=drf_status.HTTP_200_OK)
 
 @api_view(['GET'])
 def pronounce(request, id):
-    #id에서 audio_data를 찾음
-    # audio_data에서 1 ~ 까지의 subtitle을 읽어 히라가나를 내보냄
-    # 받은 translation을 추가해서 저장함
-    ...
+    audio = get_object_or_404(Audio, pk=id)
+
+    audio_data = audio.audio_data or {}
+    subtitles = audio_data.get('data') or []
+    if not subtitles:
+        return Response({'error': 'subtitles are not ready yet'}, status=drf_status.HTTP_400_BAD_REQUEST)
+
+    audio.pronounce_status = Audio.Status.PROCESSING
+    audio.save(update_fields=['pronounce_status'])
+
+    updated = False
+    try:
+        preprocess_model.load_model()
+        for entry in subtitles:
+            if entry.get('pronounce'):
+                continue
+            subtitle_text = entry.get('subtitle') or entry.get('text')
+            if not subtitle_text:
+                continue
+            pronounce_text = preprocess_model.pronounce(subtitle_text)
+            entry['pronounce'] = pronounce_text.strip()
+            updated = True
+    except Exception as exc:
+        audio.pronounce_status = Audio.Status.FAILED
+        audio.save(update_fields=['pronounce_status'])
+        return Response({'error': str(exc)}, status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    if updated:
+        audio.audio_data = audio_data
+    audio.pronounce_status = Audio.Status.FINISHED
+    audio.save(update_fields=['audio_data', 'pronounce_status'] if updated else ['pronounce_status'])
+
+    return Response({'data': subtitles}, status=drf_status.HTTP_200_OK)
 
 @api_view(['GET'])
 def audio_data(request, id):
