@@ -3,6 +3,29 @@ import uuid
 
 def default_audio_data():
     return {"data": []}
+    """
+    ex
+    {
+    data: [
+        {
+        "index":1
+        "start":13.0
+        "end":16.2
+        "subtitle":asdfasfas
+        "pronounce":asdfasd
+        "translate":asdfas
+        },
+        {
+        "index":2
+        "start": 75.6
+        "end": 1738.6
+        "subtitle":asdfasfasasf
+        "pronounce":asdfasdasdf
+        "translate":asdfasasdf
+        },
+    ]
+    }
+    """
 
 
 class Audio(models.Model):
