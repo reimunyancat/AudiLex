@@ -1,10 +1,24 @@
 import os
+import argparse
 from pathlib import Path
 import yt_dlp
-import requests
+
+if "DJANGO_SETTINGS_MODULE" not in os.environ:
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+import django
 from django.conf import settings
 
+if not settings.configured:
+    django.setup()
+
 from ..models import Audio
+
+def _data_root() -> Path:
+    base_dir = Path(getattr(settings, "DATA_ROOT", Path(settings.BASE_DIR) / "data"))
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return base_dir
+
 
 def _download_youtube_audio(youtube_link: str, output_dir: Path):
     ydl_opts = {
@@ -25,56 +39,61 @@ def _download_youtube_audio(youtube_link: str, output_dir: Path):
         return video_id, title, final_mp3_path
 
 def _save_audio_db(job: Audio, title: str, final_mp3_path: Path):
-    filename_for_db = os.path.relpath(final_mp3_path, settings.DATA_ROOT)
-    job.title = title
-    job.audio_file_path = filename_for_db
-    job.download_status = Audio.Status.SUCCESS
-    job.save()
+    relative_path = os.path.relpath(final_mp3_path, settings.BASE_DIR)
+    job.youtube_title = title
+    job.audio_name = title
+    job.audio_dir = relative_path
+    job.audio_status = Audio.Status.FINISHED
+    job.save(update_fields=[
+        'youtube_title',
+        'audio_name',
+        'audio_dir',
+        'audio_status',
+    ])
 
 def download_audio(job_id):
+    job = None
     try:
         job = Audio.objects.get(pk=job_id)
-        job.download_status = Audio.Status.PROCESSING
-        job.save()
+        job.audio_status = Audio.Status.PROCESSING
+        job.save(update_fields=['audio_status'])
 
-        audio_dir = settings.DATA_ROOT / 'audio'
-        os.makedirs(audio_dir, exist_ok=True)
+        data_root = _data_root()
+        audio_dir = data_root / 'audio'
+        audio_dir.mkdir(parents=True, exist_ok=True)
 
-        video_id, title, final_mp3_path = _download_youtube_audio(job.youtube_link, audio_dir)
+        _, title, final_mp3_path = _download_youtube_audio(job.youtube_link, audio_dir)
         _save_audio_db(job, title, final_mp3_path)
 
-        print(f"Download complete. Sending to STT server for transcription: {job.id}...")
-        
-        transcript_dir = settings.DATA_ROOT / 'transcript'
-        os.makedirs(transcript_dir, exist_ok=True)
-        
-        try:
-            with open(final_mp3_path, 'rb') as audio_file:
-                files = {'audio': (audio_file.name, audio_file, 'audio/mpeg')}
-                stt_response = requests.post(
-                    f"{settings.STT_SERVER_URL}/transcribe",
-                    files=files,
-                    timeout=3600
-                )
-            stt_response.raise_for_status()
-            transcription_result = stt_response.json()
-
-            job.transcript = transcription_result['text']
-            job.transcript_status = Audio.Status.SUCCESS
-            job.save()
-            print(f"Transcription complete for {job.id}.")
-
-        except requests.exceptions.RequestException as req_e:
-            print(f"Error communicating with STT server for {job.id}: {req_e}")
-            job.transcript_status = Audio.Status.FAILED
-            job.save()
-        except Exception as e:
-            print(f"Error processing transcription result for {job.id}: {e}")
-            job.transcript_status = Audio.Status.FAILED
-            job.save()
-
-
+    except Audio.DoesNotExist:
+        print(f"Audio job {job_id} does not exist")
     except Exception as e:
         print(f"Error processing {job_id}: {e}")
-        job.download_status = Audio.Status.FAILED
-        job.save()
+        if job:
+            job.audio_status = Audio.Status.FAILED
+            job.save(update_fields=['audio_status'])
+
+
+def _download_raw_audio(youtube_link: str, output_dir: Path | None = None) -> Path:
+    output_dir = output_dir or (_data_root() / 'audio')
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _, title, final_path = _download_youtube_audio(youtube_link, output_dir)
+    print(f"Downloaded '{title}' to {final_path}")
+    return final_path
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Standalone audio download tester")
+    parser.add_argument("youtube_link", help="YouTube URL to download")
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Directory to store the downloaded audio (defaults to data/audio)",
+    )
+    args = parser.parse_args()
+
+    output_path = _download_raw_audio(
+        args.youtube_link,
+        Path(args.output_dir) if args.output_dir else None,
+    )
+    print(f"Audio saved at: {output_path}")

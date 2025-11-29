@@ -1,4 +1,5 @@
 import os
+import threading
 import base64
 import mimetypes
 from rest_framework.decorators import api_view
@@ -9,15 +10,15 @@ from django.shortcuts import get_object_or_404
 from .models import Audio
 from .functions.audio import download_audio as process_audio_download
 from .functions.subtitle import STTModel
-from .functions.pronounce import PronounceModel
+from .functions.preprocess import PreprocessModel
 
 
 stt_model = STTModel()
-pronounce_model = PronounceModel()
+preprocess_model = PreprocessModel()
 
 
 @api_view(['POST'])
-def download_audio(request):
+def download_audio(request, link):
     """
     API endpoint to download audio from a YouTube video.
     """
@@ -26,16 +27,25 @@ def download_audio(request):
         if not video_url:
             return Response({'error': 'video_url is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            process_audio_download(video_url, settings.MEDIA_ROOT)
-            
-            response_data = {
-                'message': 'Audio download completed successfully.',
-                'video_url': video_url,
-            }
-            return Response(response_data, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        audio = Audio.objects.create(
+            youtube_link=video_url,
+            youtube_title='',
+            audio_name='pending',
+            audio_dir='',
+        )
+
+        threading.Thread(
+            target=process_audio_download,
+            args=(audio.id,),
+            daemon=True,
+        ).start()
+
+        response_data = {
+            'message': 'Audio job created. Processing in background.',
+            'audio_id': str(audio.id),
+            'status': audio.audio_status,
+        }
+        return Response(response_data, status=status.HTTP_202_ACCEPTED)
 
 @api_view(['GET'])
 def status(request):
@@ -93,10 +103,16 @@ def subtitle(request, id):
 
 @api_view(['GET'])
 def translation(request, id):
+    #id에서 audio_data를 찾음
+    # audio_data에서 1 ~ 까지의 subtitle을 읽어 translation을 내보냄
+    # 받은 translation을 추가해서 저장함
     ...
 
 @api_view(['GET'])
 def pronounce(request, id):
+    #id에서 audio_data를 찾음
+    # audio_data에서 1 ~ 까지의 subtitle을 읽어 히라가나를 내보냄
+    # 받은 translation을 추가해서 저장함
     ...
 
 @api_view(['GET'])
