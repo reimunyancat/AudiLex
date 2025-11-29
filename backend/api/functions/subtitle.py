@@ -21,11 +21,11 @@ class STTmodel:
         result = self.model.transcribe(audio_path, word_timestamps=True)
 
         timelines = []
-        for segment in result['segments']:
+        for idx, segment in enumerate(result['segments']):
             start = round(segment['start'],3)
             end = round(segment['end'],3)
             text = segment['text'].strip()
-            timelines.append({'start':start, 'end':end, 'text':text})
+            timelines.append({'index':idx, 'start':start, 'end':end, 'subtitle':text})
         
         return timelines
 
