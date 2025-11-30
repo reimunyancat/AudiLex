@@ -1,11 +1,13 @@
 import os
 import base64
 import mimetypes
+import threading
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status as drf_status
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 from .models import Audio
 from .functions.audio import download_audio as process_audio_download
 from .functions.subtitle import STTModel
@@ -15,6 +17,17 @@ from .functions.status import get_status_by_id, get_all_statuses
 
 stt_model = STTModel()
 preprocess_model = PreprocessModel()
+
+# 오디오 데이터에서 데이터가 덮어씌워지는 거 방지
+audio_data_locks = {}
+audio_data_locks_lock = threading.Lock()
+
+def get_audio_lock(audio_id):
+    """Get or create a lock for a specific audio record."""
+    with audio_data_locks_lock:
+        if audio_id not in audio_data_locks:
+            audio_data_locks[audio_id] = threading.Lock()
+        return audio_data_locks[audio_id]
 
 
 @api_view(['POST'])
@@ -130,27 +143,40 @@ def translation(request, id):
     audio.translation_status = Audio.Status.PROCESSING
     audio.save(update_fields=['translation_status'])
 
-    updated = False
+    # 번역과 발음이 동시에 요청될 때 audio_data가 덮어씌워지는 문제 방지
+    lock = get_audio_lock(str(id))
+    
     try:
         preprocess_model.load_model()
-        for entry in subtitles:
+        translations = {}
+        for i, entry in enumerate(subtitles):
             if entry.get('translate'):
                 continue
             subtitle_text = entry.get('subtitle') or entry.get('text')
             if not subtitle_text:
                 continue
             translation_text = preprocess_model.translate(subtitle_text)
-            entry['translate'] = translation_text.strip()
-            updated = True
+            translations[i] = translation_text.strip()
     except Exception as exc:
         audio.translation_status = Audio.Status.FAILED
         audio.save(update_fields=['translation_status'])
         return Response({'error': str(exc)}, status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    if updated:
+    # 번역과 발음이 동시에 요청될 때 audio_data가 덮어씌워지는 문제 방지
+    with lock:
+        # 가장 최신 audio_data를 가져오기 위해 다시 불러옴
+        audio.refresh_from_db()
+        audio_data = audio.audio_data or {}
+        subtitles = audio_data.get('data') or []
+        
+        for i, translation_text in translations.items():
+            if i < len(subtitles):
+                subtitles[i]['translate'] = translation_text
+        
+        audio_data['data'] = subtitles
         audio.audio_data = audio_data
-    audio.translation_status = Audio.Status.FINISHED
-    audio.save(update_fields=['audio_data', 'translation_status'] if updated else ['translation_status'])
+        audio.translation_status = Audio.Status.FINISHED
+        audio.save(update_fields=['audio_data', 'translation_status'])
 
     return Response({'data': subtitles}, status=drf_status.HTTP_200_OK)
 
@@ -166,27 +192,40 @@ def pronounce(request, id):
     audio.pronounce_status = Audio.Status.PROCESSING
     audio.save(update_fields=['pronounce_status'])
 
-    updated = False
+    # 번역과 발음이 동시에 요청될 때 audio_data가 덮어씌워지는 문제 방지
+    lock = get_audio_lock(str(id))
+    
     try:
         preprocess_model.load_model()
-        for entry in subtitles:
+        pronounces = {}
+        for i, entry in enumerate(subtitles):
             if entry.get('pronounce'):
                 continue
             subtitle_text = entry.get('subtitle') or entry.get('text')
             if not subtitle_text:
                 continue
             pronounce_text = preprocess_model.pronounce(subtitle_text)
-            entry['pronounce'] = pronounce_text.strip()
-            updated = True
+            pronounces[i] = pronounce_text.strip()
     except Exception as exc:
         audio.pronounce_status = Audio.Status.FAILED
         audio.save(update_fields=['pronounce_status'])
         return Response({'error': str(exc)}, status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    if updated:
+    # 번역과 발음이 동시에 요청될 때 audio_data가 덮어씌워지는 문제 방지
+    with lock:
+        # 가장 최신 audio_data를 가져오기 위해 다시 불러옴
+        audio.refresh_from_db()
+        audio_data = audio.audio_data or {}
+        subtitles = audio_data.get('data') or []
+        
+        for i, pronounce_text in pronounces.items():
+            if i < len(subtitles):
+                subtitles[i]['pronounce'] = pronounce_text
+        
+        audio_data['data'] = subtitles
         audio.audio_data = audio_data
-    audio.pronounce_status = Audio.Status.FINISHED
-    audio.save(update_fields=['audio_data', 'pronounce_status'] if updated else ['pronounce_status'])
+        audio.pronounce_status = Audio.Status.FINISHED
+        audio.save(update_fields=['audio_data', 'pronounce_status'])
 
     return Response({'data': subtitles}, status=drf_status.HTTP_200_OK)
 
@@ -225,3 +264,21 @@ def audio_data(request, id):
         },
         status=drf_status.HTTP_200_OK,
     )
+
+@api_view(['DELETE'])
+def delete_audio(request, id):
+    audio = get_object_or_404(Audio, pk=id)
+
+    audio_path = audio.audio_dir
+    if audio_path and not os.path.isabs(audio_path):
+        audio_path = os.path.join(settings.BASE_DIR, audio_path.lstrip('/'))
+
+    try:
+        if audio_path and os.path.exists(audio_path):
+            os.remove(audio_path)
+    except OSError as exc:
+        return Response({'error': f'failed to delete audio file: {exc}'}, status=drf_status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    audio.delete()
+
+    return Response({'message': 'Audio record and file deleted successfully.'}, status=drf_status.HTTP_200_OK)
