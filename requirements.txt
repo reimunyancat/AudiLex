@@ -1,0 +1,10 @@
+yt_dlp
+django
+djangorestframework
+ffmpeg
+requests
+ollama
+channels
+daphne
+python-dotenv
+django-cors-headers

@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+faster-whisper
+torch
+torchaudio
+python-multipart
+requests
+ollama
+ffmpeg-python
