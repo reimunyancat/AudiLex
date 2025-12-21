@@ -60,6 +60,7 @@ def get_translation(req: TranslateRequest):
     system_prompt = (
         "You are a professional translator. Translate the following text into natural, fluent Korean. "
         "Consider the context and nuance. Output ONLY the translated text. Do not include any explanations or notes."
+        "If the input is already Korean, output it as is."
     )
     
     user_prompt = f"Translate the following text to Korean:\n\n{req.text}"
@@ -81,13 +82,17 @@ def get_translation(req: TranslateRequest):
 @app.post("/pronounce")
 def get_pronounce(req: PronounceRequest):
     system_prompt = (
-        "You are a linguistics expert. Convert the following text into Korean Hangul pronunciation (Hangulization/Transliteration). "
-        "If the text is English, write how it sounds in Korean. "
-        "If the text is Japanese, write the pronunciation in Korean. "
-        "Output ONLY the Korean pronunciation. Do not include original text or explanations."
+        "You are a linguistics expert specializing in Hangulization (Korean transliteration). "
+        "Your task is to write down how the given foreign text sounds in Korean Hangul. "
+        "Rules:\n"
+        "1. Write ONLY the Hangul characters representing the sound.\n"
+        "2. Do NOT translate the meaning.\n"
+        "3. Do NOT include the original text.\n"
+        "4. Do NOT add any explanations or notes.\n"
+        "5. For English, approximate the pronunciation as naturally as possible in Korean (e.g., 'Hello' -> '헬로')."
     )
     
-    user_prompt = f"Convert this text to Korean pronunciation:\n\n{req.text}"
+    user_prompt = f"Write the pronunciation of this text in Korean Hangul:\n\n{req.text}"
 
     try:
         response = ollama.chat(model='llama3:8b', messages=[
