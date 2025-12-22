@@ -160,11 +160,24 @@ export default function AudioDetail() {
     type: "subtitle" | "translation" | "pronounce"
   ) => {
     try {
+      // Optimistic update: Set status to Processing immediately
+      setStatus((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          [`${type}_status`]: "Processing",
+        };
+      });
+
       await client.get(`/make_${type}/${id}`);
+      // fetchStatus will be called by websocket or subsequent updates,
+      // but we can call it here too just in case
       fetchStatus();
     } catch (e) {
       console.error(`Failed to trigger ${type}`, e);
       alert(`Failed to start ${type} generation.`);
+      // Revert status on failure
+      fetchStatus();
     }
   };
 

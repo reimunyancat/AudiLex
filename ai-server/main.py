@@ -13,9 +13,10 @@ UPLOAD_DIR = Path("temp_uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 print("Loading Whisper Model...")
-model = WhisperModel("large-v3", device="cuda", compute_type="int8")
+model = WhisperModel("large-v3", device="cuda", compute_type="int8") 
 print("Whisper Model Loaded!")
 
+MODEL_NAME = "llama3.1"
 class TranscribeRequest(BaseModel):
     file_path: str
     language: str = None
@@ -31,18 +32,26 @@ async def transcribe_audio(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
     
     try:
-        segments, info = model.transcribe(str(temp_path), beam_size=5)
+        segments, info = model.transcribe(
+            str(temp_path), 
+            beam_size=5,
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=300)
+        )
         
         result = []
         for segment in segments:
             result.append({
                 "start": segment.start,
                 "end": segment.end,
-                "text": segment.text
+                "text": segment.text.strip()
             })
             
         return {"language": info.language, "segments": result}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"Transcribe Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         pass
@@ -59,17 +68,26 @@ class TranslateRequest(BaseModel):
 def get_translation(req: TranslateRequest):
     system_prompt = (
         "You are a professional translator. Translate the following text into natural, fluent Korean. "
-        "Consider the context and nuance. Output ONLY the translated text. Do not include any explanations or notes."
-        "If the input is already Korean, output it as is."
+        "Rules:\n"
+        "1. Output ONLY the translated Korean text.\n"
+        "2. Do NOT include the original text.\n"
+        "3. Do NOT add any explanations, notes, or parentheses like '(Note: ...)'.\n"
+        "4. Do NOT add quotes around the translation.\n"
+        "5. Translate accurately and naturally.\n"
+        "6. If the text is incomplete or nonsensical, translate it as best as possible based on context.\n"
+        "7. Do NOT use emojis or emoticons."
     )
     
-    user_prompt = f"Translate the following text to Korean:\n\n{req.text}"
+    user_prompt = f"Translate this text to Korean:\n\n{req.text}"
 
     try:
-        response = ollama.chat(model='llama3:8b', messages=[
+        response = ollama.chat(model=MODEL_NAME, messages=[
             {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': user_prompt},
-        ])
+        ], options={
+            'temperature': 0.1,
+            'num_ctx': 1024
+        })
         
         if not response or 'message' not in response or 'content' not in response['message']:
              raise ValueError("Invalid response from Ollama")
@@ -82,23 +100,28 @@ def get_translation(req: TranslateRequest):
 @app.post("/pronounce")
 def get_pronounce(req: PronounceRequest):
     system_prompt = (
-        "You are a linguistics expert specializing in Hangulization (Korean transliteration). "
-        "Your task is to write down how the given foreign text sounds in Korean Hangul. "
-        "Rules:\n"
-        "1. Write ONLY the Hangul characters representing the sound.\n"
-        "2. Do NOT translate the meaning.\n"
-        "3. Do NOT include the original text.\n"
-        "4. Do NOT add any explanations or notes.\n"
-        "5. For English, approximate the pronunciation as naturally as possible in Korean (e.g., 'Hello' -> '헬로')."
+        "You are a strict transliteration machine. Your ONLY job is to convert the sound of the input text into Korean Hangul characters."
+        "\n\n"
+        "STRICT RULES:\n"
+        "1. Output ONLY the Hangul pronunciation. NO other text.\n"
+        "2. NEVER translate the meaning. (e.g., 'Apple' -> '애플' (O), '사과' (X))\n"
+        "3. NEVER output consonants alone like 'ㄴㅇㄱㄷㅁㅇ'. Always form complete Hangul blocks.\n"
+        "4. If the input is Russian, write how it sounds in Korean. (e.g., 'Да' -> '다')\n"
+        "5. If the input is English, write how it sounds in Korean. (e.g., 'Love' -> '러브')\n"
+        "6. Do NOT include the original text in the output.\n"
+        "7. Do NOT add any notes, explanations, or punctuation."
     )
     
-    user_prompt = f"Write the pronunciation of this text in Korean Hangul:\n\n{req.text}"
+    user_prompt = f"Transliterate the sound of this text into Korean Hangul:\n\n{req.text}"
 
     try:
-        response = ollama.chat(model='llama3:8b', messages=[
+        response = ollama.chat(model=MODEL_NAME, messages=[
             {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': user_prompt},
-        ])
+        ], options={
+            'temperature': 0.0,
+            'num_ctx': 1024
+        })
         
         if not response or 'message' not in response or 'content' not in response['message']:
              raise ValueError("Invalid response from Ollama")
